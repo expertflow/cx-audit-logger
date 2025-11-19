@@ -1,4 +1,4 @@
-package com.ef.audit.dtos;
+package com.ef.auditlogger.dtos;
 
 import lombok.Builder;
 import lombok.Data;

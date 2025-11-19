@@ -21,7 +21,7 @@ Add the following dependency to your `pom.xml`:
 ```xml
 <dependency>
     <groupId>io.github.expertflow</groupId>
-    <artifactId>efcx-json-logger</artifactId>
+    <artifactId>cx-audit-logger</artifactId>
     <version>1.0</version>
 </dependency>
 ```
@@ -30,17 +30,13 @@ Add the following dependency to your `pom.xml`:
 
 If using Gradle, add to your `build.gradle`:
 
-```groovy
-implementation 'io.github.expertflow:efcx-json-logger:1.0'
-```
-
 ## Usage
 
 ### Basic Usage
 
 ```java
-import com.ef.audit.AuditLogger;
-import com.ef.audit.dtos.AuditInput;
+import com.ef.auditlogger.AuditLogger;
+import com.ef.auditlogger.dtos.AuditInput;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,15 +47,15 @@ public class MyService {
 
     public void performAction() {
         AuditInput input = AuditInput.builder()
-            .userId("123")
-            .userName("John Doe")
-            .action("CREATE")
-            .resource("User")
-            .resourceId("456")
-            .ip("192.168.1.1")
-            .service("UserService")
-            .updatedData(Map.of("name", "New User", "role", "admin"))
-            .build();
+                .userId("123")
+                .userName("John Doe")
+                .action("CREATE")
+                .resource("User")
+                .resourceId("456")
+                .ip("192.168.1.1")
+                .service("UserService")
+                .updatedData(Map.of("name", "New User", "role", "admin"))
+                .build();
 
         auditLogger.log(logger, input);
     }

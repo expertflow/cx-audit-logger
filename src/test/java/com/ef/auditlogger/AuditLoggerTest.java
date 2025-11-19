@@ -1,7 +1,7 @@
-package com.ef.audit;
+package com.ef.auditlogger;
 
-import com.ef.audit.dtos.AuditInput;
-import com.ef.audit.models.AuditLogPayload;
+import com.ef.auditlogger.dtos.AuditInput;
+import com.ef.auditlogger.models.AuditLogPayload;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package com.ef.audit.models;
+package com.ef.auditlogger.models;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;

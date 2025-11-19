@@ -4,11 +4,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.github.expertflow</groupId>
-    <artifactId>efcx-json-logger</artifactId>
+    <artifactId>cx-audit-logger</artifactId>
     <packaging>jar</packaging>
     <version>1.0</version>
-    <name>efcx-json-logger</name>
-    <url>https://github.com/expertflow/efcx-json-logger</url>
+    <name>cx-audit-logger</name>
+    <url>https://github.com/expertflow/cx-audit-logger</url>
     <description>This dependency contains json logger for audit logging in expert flow's CIM project</description>
 
     <licenses>
@@ -28,9 +28,9 @@
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/expertflow/efcx-json-logger.git</connection>
-        <developerConnection>scm:git:ssh://github.com/expertflow/efcx-json-logger.git</developerConnection>
-        <url>https://github.com/expertflow/efcx-json-logger</url>
+        <connection>scm:git:git://github.com/expertflow/cx-audit-logger.git</connection>
+        <developerConnection>scm:git:ssh://github.com/expertflow/cx-audit-logger.git</developerConnection>
+        <url>https://github.com/expertflow/cx-audit-logger</url>
     </scm>
 
     <properties>
