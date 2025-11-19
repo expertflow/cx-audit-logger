@@ -229,11 +229,3 @@ mvn clean install
 ### Publishing
 
 This library is published to Maven Central. The publishing process is automated through the Sonatype Central Publishing Plugin.
-
-## Changelog
-
-### Version 1.0
-- Initial release of EFCX JSON Logger
-- Core audit logging functionality
-- JSON serialization support
-- Error handling implementation
