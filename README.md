@@ -1,6 +1,6 @@
 # EFCX JSON Logger
 
-EFCX JSON Logger is a lightweight, framework-agnostic audit logging library that produces structured JSON-formatted logs for enhanced log analysis and monitoring. This library was developed for Expert Flow's CIM project to standardize audit logging across services.
+EFCX JSON Logger is a lightweight, framework-agnostic audit logging library that produces structured JSON-formatted logs for enhanced log analysis and monitoring. This library was developed for ExpertFlow's CIM project to standardize audit logging across services.
 
 ## Features
 
