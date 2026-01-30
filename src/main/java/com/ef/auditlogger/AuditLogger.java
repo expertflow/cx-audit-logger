@@ -15,9 +15,8 @@ import org.slf4j.spi.LocationAwareLogger;
  * This class is framework-agnostic and must be instantiated by the user.
  */
 public class AuditLogger {
+    public static final String AUDIT_LOGGING = "audit_logging";
     private final ObjectMapper objectMapper;
-
-    private static final String FQCN = AuditLogger.class.getName();
 
     public AuditLogger(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -31,21 +30,39 @@ public class AuditLogger {
      * @param logger The SLF4J logger instance from the calling class.
      * @param input  The simple object containing the necessary audit data.
      */
-    public void log(Logger logger, AuditInput input) {
+    public void log(Logger logger, AuditInput input, String fqcn) {
         try {
             Map<String, Object> attributes = new HashMap<>();
             if (input.getService() != null) {
                 attributes.put("service", input.getService());
             }
 
+            if (input.getTenantId() != null) {
+                attributes.put("tenantId", input.getTenantId());
+            }
+
             attributes.put("updated_data",
                     input.getUpdatedData() != null ? input.getUpdatedData() : Map.of()
             );
 
+            int level;
+
+            if (input.getLevel() == null) {
+                input.setLevel("INFO");
+            }
+
+            switch (input.getLevel().toUpperCase()) {
+                case "TRACE" -> level = LocationAwareLogger.TRACE_INT;
+                case "DEBUG" -> level = LocationAwareLogger.DEBUG_INT;
+                case "WARN" -> level = LocationAwareLogger.WARN_INT;
+                case "ERROR" -> level = LocationAwareLogger.ERROR_INT;
+                default -> level = LocationAwareLogger.INFO_INT;
+            }
+
             AuditLogPayload payload = AuditLogPayload.builder()
                     .timestamp(Instant.now().toString())
-                    .type("audit_logging")
-                    .level("info")
+                    .type(sanitizeType(input.getType()))
+                    .level(input.getLevel().toLowerCase())
                     .userId(input.getUserId())
                     .userName(input.getUserName())
                     .action(input.getAction())
@@ -60,19 +77,44 @@ public class AuditLogger {
             if (logger instanceof LocationAwareLogger locationAwareLogger) {
                 locationAwareLogger.log(
                         null,
-                        FQCN,
-                        LocationAwareLogger.INFO_INT,
+                        fqcn,
+                        level,
                         jsonMessage,
                         null,
                         null
                 );
             } else {
-                logger.info(jsonMessage);
+                if (level == LocationAwareLogger.ERROR_INT) {
+                    logger.error(jsonMessage);
+                } else if (level == LocationAwareLogger.WARN_INT) {
+                    logger.warn(jsonMessage);
+                } else if (level == LocationAwareLogger.DEBUG_INT) {
+                    logger.debug(jsonMessage);
+                } else if (level == LocationAwareLogger.TRACE_INT) {
+                    logger.trace(jsonMessage);
+                } else {
+                    logger.info(jsonMessage);
+                }
             }
         } catch (JsonProcessingException e) {
             logger.error("Failed to serialize audit log: {}, Error: {}", input, e.getMessage());
         } catch (RuntimeException e) {
             logger.error("Unexpected error during audit logging: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Enforces naming convention: audit_logging, metrics, or tracing
+     */
+    private String sanitizeType(String inputType) {
+        if (inputType == null) return AUDIT_LOGGING;
+
+        String normalized = inputType.toLowerCase().trim();
+
+        if (normalized.contains("audit")) return AUDIT_LOGGING;
+        if (normalized.contains("metric")) return "metrics";
+        if (normalized.contains("trace") || normalized.contains("tracing")) return "tracing";
+
+        return AUDIT_LOGGING;
     }
 }
