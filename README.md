@@ -22,7 +22,7 @@ Add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>io.github.expertflow</groupId>
     <artifactId>cx-audit-logger</artifactId>
-    <version>1.0</version>
+    <version>1.1</version>
 </dependency>
 ```
 
@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 
 public class MyService {
     private final Logger logger = LoggerFactory.getLogger(MyService.class);
+    private final String FQCN = MyService.class.getName();
     private final AuditLogger auditLogger = new AuditLogger(new ObjectMapper());
 
     public void performAction() {
@@ -54,10 +55,13 @@ public class MyService {
                 .resourceId("456")
                 .ip("192.168.1.1")
                 .service("UserService")
+                .tenantId("tenant1")
                 .updatedData(Map.of("name", "New User", "role", "admin"))
+                .type("audit_logging")
+                .level("info")
                 .build();
 
-        auditLogger.log(logger, input);
+        auditLogger.log(logger, input, FQCN);
     }
 }
 ```
@@ -83,6 +87,7 @@ Then inject it into your service:
 @Service
 public class MyService {
     private final Logger logger = LoggerFactory.getLogger(MyService.class);
+    private final String FQCN = MyService.class.getName();
     private final AuditLogger auditLogger;
 
     public MyService(AuditLogger auditLogger) {
@@ -98,10 +103,13 @@ public class MyService {
             .resourceId("456")
             .ip("192.168.1.1")
             .service("UserService")
+            .tenantId("tenant1")
             .updatedData(Map.of("name", "New User", "role", "admin"))
+            .type("audit_logging")
+            .level("info")
             .build();
 
-        auditLogger.log(logger, input);
+        auditLogger.log(logger, input, FQCN);
     }
 }
 ```
@@ -109,6 +117,7 @@ public class MyService {
 ### Advanced Usage with Custom Data
 
 ```java
+private final String FQCN = MyService.class.getName();
 AuditInput input = AuditInput.builder()
     .userId("user-789")
     .userName("Jane Smith")
@@ -117,14 +126,17 @@ AuditInput input = AuditInput.builder()
     .resourceId("profile-101")
     .ip("203.0.113.5")
     .service("ProfileService")
+    .tenantId("tenant1")
     .updatedData(Map.of(
         "name", "Updated Name",
         "permissions", List.of("read", "write"),
         "settings", Map.of("theme", "dark", "notifications", true)
     ))
+    .type("audit_logging")
+    .level("info")
     .build();
 
-auditLogger.log(logger, input);
+auditLogger.log(logger, input, FQCN);
 ```
 
 ## Output Format
@@ -142,6 +154,7 @@ The logger generates structured JSON logs with the following format:
   "source_ip_address": "192.168.1.1",
   "attributes": {
     "service": "UserService",
+    "tenant_id": "tenant1",
     "updated_data": {
       "name": "New User",
       "role": "admin"
@@ -171,7 +184,10 @@ Contains the essential details for audit logging:
 - `resourceId`: Unique identifier of the resource
 - `ip`: IP address of the request origin
 - `service`: Name of the service performing the action
+- `tenantId`: Name of the tenant performing the action
 - `updatedData`: Flexible object containing the changed data
+- `type`: Type of log (default: "audit_logging")
+- `level`: Log level (default: "info")
 
 ## Dependencies
 
