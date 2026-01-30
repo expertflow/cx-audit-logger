@@ -47,12 +47,15 @@ class AuditLoggerTest {
                 .resource("User")
                 .resourceId("user-456")
                 .ip("192.168.1.1")
+                .tenantId("expertflow")
                 .service("UserService")
                 .updatedData(Map.of("role", "admin"))
+                .type("audit_logging")
+                .level("info")
                 .build();
 
         // Act
-        auditLogger.log(mockLogger, input);
+        auditLogger.log(mockLogger, input, this.getClass().getName());
 
         // Assert
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
@@ -78,11 +81,15 @@ class AuditLoggerTest {
         when(failingMapper.writeValueAsString(any())).thenThrow(testException);
 
         AuditLogger failingLogger = new AuditLogger(failingMapper);
-        AuditInput input = AuditInput.builder().userId("u123").build();
+        AuditInput input = AuditInput.builder()
+                .userId("u123")
+                .type("audit_logging")
+                .level("info")
+                .build();
 
         // Act
         assertDoesNotThrow(() -> {
-            failingLogger.log(mockLogger, input);
+            failingLogger.log(mockLogger, input, this.getClass().getName());
         });
 
         // Assert
@@ -95,7 +102,7 @@ class AuditLoggerTest {
         AuditInput nullInput = null;
 
         assertDoesNotThrow(() -> {
-            auditLogger.log(mockLogger, nullInput);
+            auditLogger.log(mockLogger, nullInput, this.getClass().getName());
         });
 
         verify(mockLogger).error(eq("Unexpected error during audit logging: {}"), anyString());
@@ -109,7 +116,7 @@ class AuditLoggerTest {
         when(buggyInput.getService()).thenThrow(testException);
 
         assertDoesNotThrow(() -> {
-            auditLogger.log(mockLogger, buggyInput);
+            auditLogger.log(mockLogger, buggyInput, this.getClass().getName());
         });
 
         verify(mockLogger).error("Unexpected error during audit logging: {}", testException.getMessage());
@@ -125,10 +132,13 @@ class AuditLoggerTest {
                 .resource("User")
                 .resourceId("456")
                 .ip("127.0.0.1")
+                .tenantId("expertflow")
                 .service("testService")
+                .type("audit_logging")
+                .level("info")
                 .build();
 
-        auditLogger.log(mockLogger, input);
+        auditLogger.log(mockLogger, input, this.getClass().getName());
 
         verify(mockLogger).info(anyString());
     }

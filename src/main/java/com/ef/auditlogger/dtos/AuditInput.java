@@ -16,5 +16,8 @@ public class AuditInput {
     private String resourceId;
     private String ip;
     private String service;
+    private String tenantId;
     private Object updatedData;
+    private String type;
+    private String level;
 }
