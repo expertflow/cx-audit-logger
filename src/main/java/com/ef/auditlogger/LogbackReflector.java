@@ -38,7 +38,7 @@ public class LogbackReflector {
         try {
             Object logbackLevel = toLevelMethod.invoke(null, levelStr != null ? levelStr.toUpperCase() : "INFO");
             Object event = eventConstructor.newInstance(
-                    logger.getClass().getName(), logger, logbackLevel, message, null, null
+                    "ch.qos.logback.classic.Logger", logger, logbackLevel, message, null, null
             );
             setCallerMethod.invoke(event, (Object) new StackTraceElement[]{caller});
             callAppendersMethod.invoke(logger, event);

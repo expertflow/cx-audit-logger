@@ -18,7 +18,6 @@ public class AuditDiffCalculator {
         this.objectMapper = objectMapper;
     }
 
-    @SuppressWarnings("java:S7467")
     public Object calculateDiff(Object oldData, Object newData) {
         try {
             JsonNode oldNode = objectMapper.valueToTree(oldData);
@@ -36,37 +35,45 @@ public class AuditDiffCalculator {
         if (newNode.isArray()) {
             return diffArray(oldNode, newNode);
         }
+        return extractPrimitive(newNode);
+    }
 
-        if (newNode.isTextual()) {
-            return newNode.asText();
+    private Object extractPrimitive(JsonNode node) {
+        if (node.isTextual()) {
+            return node.asText();
         }
-        if (newNode.isNumber()) {
-            return newNode.numberValue();
+        if (node.isNumber()) {
+            return node.numberValue();
         }
-        if (newNode.isBoolean()) {
-            return newNode.asBoolean();
+        if (node.isBoolean()) {
+            return node.asBoolean();
         }
-        if (newNode.isNull()) {
-            return null;
-        }
-
-        return newNode;
+        return null;
     }
 
     private Map<String, Object> diffObject(JsonNode oldNode, JsonNode newNode) {
         Map<String, Object> diffMap = new HashMap<>();
         newNode.properties().forEach(entry -> {
-            JsonNode oldValue = (oldNode != null) ? oldNode.get(entry.getKey()) : null;
+            String key = entry.getKey();
             JsonNode newValue = entry.getValue();
+            JsonNode oldValue = (oldNode != null) ? oldNode.get(key) : null;
 
             if (oldValue == null || !oldValue.equals(newValue)) {
-                Object childDiff = findDiffNested(oldValue, newValue);
-                if (childDiff != null) {
-                    diffMap.put(entry.getKey(), childDiff);
-                }
+                appendObjectDiff(diffMap, key, oldValue, newValue);
             }
         });
         return diffMap.isEmpty() ? null : diffMap;
+    }
+
+    private void appendObjectDiff(Map<String, Object> diffMap, String key, JsonNode oldValue, JsonNode newValue) {
+        if (newValue.isContainerNode()) {
+            Object childDiff = findDiffNested(oldValue, newValue);
+            if (childDiff != null) {
+                diffMap.put(key, childDiff);
+            }
+        } else {
+            diffMap.put(key, extractPrimitive(newValue));
+        }
     }
 
     private List<Object> diffArray(JsonNode oldNode, JsonNode newNode) {
@@ -84,9 +91,6 @@ public class AuditDiffCalculator {
 
     private void processArrayItemDiff(List<Object> diffList, JsonNode oldItem, JsonNode newItem) {
         Object itemDiff = findDiffNested(oldItem, newItem);
-        if (itemDiff == null) {
-            return;
-        }
 
         if (newItem.isObject() && itemDiff instanceof Map) {
             Map<String, Object> diffMap = (Map<String, Object>) itemDiff;

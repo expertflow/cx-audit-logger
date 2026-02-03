@@ -87,7 +87,7 @@ class AuditLoggerTest {
         });
 
         // Assert
-        verify(mockLogger).error(eq("Audit logging failed"), eq(testException));
+        verify(mockLogger).error("Audit logging failed", testException);
         verify(mockLogger, never()).info(anyString());
     }
 
@@ -117,7 +117,7 @@ class AuditLoggerTest {
         });
 
         // Assert
-        verify(mockLogger).error(eq("Audit logging failed"), eq(testException));
+        verify(mockLogger).error("Audit logging failed", testException);
         verify(mockLogger, never()).info(anyString());
     }
 }

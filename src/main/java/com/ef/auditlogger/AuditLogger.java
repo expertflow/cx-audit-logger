@@ -4,6 +4,7 @@ import com.ef.auditlogger.dtos.AuditInput;
 import com.ef.auditlogger.models.AuditLogPayload;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,20 +35,34 @@ public class AuditLogger {
         try {
             String jsonMessage = buildJsonMessage(input);
 
-            if (caller != null && REFLECTOR.isAvailable() && isLogback(logger)) {
-                REFLECTOR.log(logger, input.getLevel(), jsonMessage, caller);
+            Logger actualLogger = unwrap(logger);
+
+            if (caller != null && REFLECTOR.isAvailable() && isLogback(actualLogger)) {
+                REFLECTOR.log(actualLogger, input.getLevel(), jsonMessage, caller);
                 return;
             }
 
             int levelInt = getSlf4jLevel(input.getLevel());
-            if (logger instanceof LocationAwareLogger locationAwareLogger) {
-                locationAwareLogger.log(null, fqcn, levelInt, jsonMessage, null, null);
+            if (logger instanceof LocationAwareLogger lAL) {
+                lAL.log(null, fqcn, levelInt, jsonMessage, null, null);
             } else {
                 logStandard(logger, levelInt, jsonMessage);
             }
         } catch (Exception e) {
             logger.error("Audit logging failed", e);
         }
+    }
+
+    private Logger unwrap(Logger logger) {
+        try {
+            if (logger.getClass().getName().contains("Slf4jLogger")) {
+                Field field = logger.getClass().getDeclaredField("logger");
+                field.setAccessible(true);
+                Object internal = field.get(logger);
+                if (internal instanceof Logger l) return l;
+            }
+        } catch (Exception ignored) {}
+        return logger;
     }
 
     private String buildJsonMessage(AuditInput input) throws JsonProcessingException {
@@ -73,7 +88,7 @@ public class AuditLogger {
     }
 
     private boolean isLogback(Logger logger) {
-        return logger.getClass().getName().startsWith("ch.qos.logback");
+        return logger.getClass().getName().startsWith("ch.qos.logback.classic.Logger");
     }
 
     private int getSlf4jLevel(String levelStr) {
