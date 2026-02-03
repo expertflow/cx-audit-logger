@@ -1,16 +1,15 @@
 # CX Audit Logger
 
-CX Audit Logger is a lightweight, framework-agnostic audit logging library that produces structured JSON-formatted logs for enhanced log analysis and monitoring. This library was developed for ExpertFlow's CIM project to standardize audit logging across services.
+CX Audit Logger is a high-performance, framework-agnostic audit logging library designed for modern Java applications. It produces structured JSON-formatted logs and includes advanced features for deep recursive diffing and support for asynchronous or virtual thread environments.
 
 ## Features
 
-- **Simple API**: Single method for audit logging with minimal configuration
-- **JSON-formatted output**: Structured logging for better analysis and parsing
-- **Thread-safe implementation**: Safe to use in multi-threaded environments
-- **SLF4J integration**: Works with any SLF4J-compatible logging framework
-- **Flexible attribute mapping**: Support for custom data fields via attributes map
-- **Robust error handling**: "Never throws" design - errors are logged rather than propagated
-- **Lombok integration**: Clean, concise DTOs and models
+- **Zero-Config Async Support**: Preserves correct Class, Method, and Line numbers even when logging from `@Async` or Virtual Threads (requires Logback).
+- **Deep Recursive Diffing**: Built-in utility to calculate the difference between "Old" and "New" objects. It minimizes log volume by only recording what actually changed.
+- **High Performance**: Uses cached reflection handles to inject caller data with near-zero overhead.
+- **JSON-formatted output**: Structured logging for better analysis (ELK/OpenSearch compatible).
+- **Simple API**: Dual-mode API (Sync & Async) for maximum flexibility.
+- **Robust error handling**: "Never throws" design - errors are logged safely rather than propagated.
 
 ## Installation
 
@@ -22,142 +21,122 @@ Add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>io.github.expertflow</groupId>
     <artifactId>cx-audit-logger</artifactId>
-    <version>1.1</version>
+    <version>1.2.0</version>
 </dependency>
 ```
 
-### Gradle
-
-If using Gradle, add to your `build.gradle`:
-
 ## Usage
 
-### Basic Usage
+### 1. Standard Synchronous Usage
+For standard synchronous code, usage remains unchanged. The library automatically detects the calling class, method, and line number.
 
 ```java
 import com.ef.auditlogger.AuditLogger;
 import com.ef.auditlogger.dtos.AuditInput;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-public class MyService {
-    private final Logger logger = LoggerFactory.getLogger(MyService.class);
-    private final String FQCN = MyService.class.getName();
+public class UserService {
+    private final Logger logger = LoggerFactory.getLogger(UserService.class);
+    private final String FQCN = UserService.class.getName();
+    // Inject or instantiate
     private final AuditLogger auditLogger = new AuditLogger(new ObjectMapper());
 
-    public void performAction() {
+    public void createUser() {
         AuditInput input = AuditInput.builder()
                 .userId("123")
-                .userName("John Doe")
                 .action("CREATE")
                 .resource("User")
-                .resourceId("456")
-                .ip("192.168.1.1")
-                .service("UserService")
-                .tenantId("tenant1")
-                .updatedData(Map.of("name", "New User", "role", "admin"))
-                .type("audit_logging")
-                .level("info")
+                .updatedData(Map.of("role", "admin"))
                 .build();
 
+        // Standard call - Auto-detects stack trace
         auditLogger.log(logger, input, FQCN);
     }
 }
 ```
 
-### Spring Boot Configuration
+### 2. Asynchronous / Virtual Thread Usage
+In `@Async` methods or Virtual Threads, the standard stack trace is lost (pointing to internal JVM proxy classes). To fix this, capture the stack frame in the main thread and pass it to the logger.
 
-If using Spring Boot, you can define the AuditLogger as a bean.
+The library uses optimized reflection to inject this data into Logback, ensuring your logs show the original service location instead of `CompletableFuture` or `DirectMethodHandleAccessor`.
+
+```java
+public class AsyncWorker {
+    
+    public void processAsync() {
+        // 1. Capture the caller frame in the MAIN thread
+        StackTraceElement caller = Thread.currentThread().getStackTrace()[1];
+        
+        // 2. Pass it to your async method/thread
+        CompletableFuture.runAsync(() -> {
+             AuditInput input = AuditInput.builder().action("UPDATE").build();
+             
+             // 3. Call the overloaded log method
+             auditLogger.log(logger, input, FQCN, caller); 
+        });
+    }
+}
+```
+
+### 3. Using the Diff Calculator
+The library now includes `AuditDiffCalculator` to generate minimal JSON diffs. It handles nested objects, lists, and identity matching (by `id` or `key`).
+
+```java
+import com.ef.auditlogger.utils.AuditDiffCalculator;
+
+AuditDiffCalculator calculator = new AuditDiffCalculator(new ObjectMapper());
+
+Map<String, Object> oldData = Map.of("status", "ACTIVE", "retries", 0);
+Map<String, Object> newData = Map.of("status", "INACTIVE", "retries", 0);
+
+// Returns only: {"status": "INACTIVE"}
+Object diff = calculator.calculateDiff(oldData, newData); 
+
+AuditInput input = AuditInput.builder()
+        .updatedData(diff)
+        .build();
+```
+
+## Spring Boot Configuration
+
+Define the beans in your configuration:
 
 ```java
 @Configuration
-public class AuditLoggerConfig {
-    
+public class AuditConfig {
+
     @Bean
     public AuditLogger auditLogger(ObjectMapper objectMapper) {
         return new AuditLogger(objectMapper);
     }
-}
-```
 
-Then inject it into your service:
-
-```java
-@Service
-public class MyService {
-    private final Logger logger = LoggerFactory.getLogger(MyService.class);
-    private final String FQCN = MyService.class.getName();
-    private final AuditLogger auditLogger;
-
-    public MyService(AuditLogger auditLogger) {
-        this.auditLogger = auditLogger;
-    }
-
-    public void performAction() {
-        AuditInput input = AuditInput.builder()
-            .userId("123")
-            .userName("John Doe")
-            .action("CREATE")
-            .resource("User")
-            .resourceId("456")
-            .ip("192.168.1.1")
-            .service("UserService")
-            .tenantId("tenant1")
-            .updatedData(Map.of("name", "New User", "role", "admin"))
-            .type("audit_logging")
-            .level("info")
-            .build();
-
-        auditLogger.log(logger, input, FQCN);
+    @Bean
+    public AuditDiffCalculator auditDiffCalculator(ObjectMapper objectMapper) {
+        return new AuditDiffCalculator(objectMapper);
     }
 }
-```
-
-### Advanced Usage with Custom Data
-
-```java
-private final String FQCN = MyService.class.getName();
-AuditInput input = AuditInput.builder()
-    .userId("user-789")
-    .userName("Jane Smith")
-    .action("UPDATE")
-    .resource("Profile")
-    .resourceId("profile-101")
-    .ip("203.0.113.5")
-    .service("ProfileService")
-    .tenantId("tenant1")
-    .updatedData(Map.of(
-        "name", "Updated Name",
-        "permissions", List.of("read", "write"),
-        "settings", Map.of("theme", "dark", "notifications", true)
-    ))
-    .type("audit_logging")
-    .level("info")
-    .build();
-
-auditLogger.log(logger, input, FQCN);
 ```
 
 ## Output Format
 
-The logger generates structured JSON logs with the following format:
+The logger generates structured JSON. When using the Diff Calculator, the `updated_data` field contains only changed values.
 
 ```json
 {
-  "timestamp": "2025-09-02T14:35:00.123Z",
+  "timestamp": "2026-02-03T14:35:00.123Z",
   "user_id": "123",
-  "user_name": "John Doe",
-  "action": "CREATE",
-  "resource": "User",
-  "resource_id": "456",
-  "source_ip_address": "192.168.1.1",
+  "action": "UPDATE",
+  "resource": "ChannelConnector",
+  "resource_id": "conn-1",
   "attributes": {
-    "service": "UserService",
-    "tenant_id": "tenant1",
+    "service": "ChannelManager",
+    "tenantId": "expertflow",
     "updated_data": {
-      "name": "New User",
-      "role": "admin"
+      "channelProviderConfigs": [
+        {
+          "key": "SMTP-PORT",
+          "value": 587
+        }
+      ]
     }
   },
   "type": "audit_logging",
@@ -167,77 +146,33 @@ The logger generates structured JSON logs with the following format:
 
 ## API Documentation
 
-### AuditLogger Class
+### `AuditLogger` Class
 
-The main class with a single public method:
+*   **`log(Logger logger, AuditInput input, String fqcn)`**
+    *   Standard method. Uses SLF4J `LocationAwareLogger` to auto-detect caller info.
+*   **`log(Logger logger, AuditInput input, String fqcn, StackTraceElement caller)`**
+    *   Manually injects the provided `StackTraceElement` into the logging event.
+    *   Supports standard Logback features (`%class`, `%method`, `%line`) even when running on Virtual Threads.
+    *   Falls back gracefully to standard logging if Reflection fails or if not using Logback.
 
-- `log(Logger logger, AuditInput input)`: Creates and writes an audit log entry
+### `AuditDiffCalculator` Class
 
-### AuditInput DTO
+*   **`calculateDiff(Object oldData, Object newData)`**
+    *   Recursively compares two objects.
+    *   Returns `null` or empty Map if objects are identical.
+    *   Smart-matches List items by `id` or `key` fields.
+    *   Converts JSON primitives (IntNode, TextNode) to Java primitives (Integer, String) for cleaner logs.
 
-Contains the essential details for audit logging:
+## Requirements
 
-- `userId`: Unique identifier of the user
-- `userName`: Name of the user
-- `action`: Type of action performed (e.g., "CREATE", "UPDATE", "DELETE")
-- `resource`: Type of resource acted upon (e.g., "Team", "UserProfile")
-- `resourceId`: Unique identifier of the resource
-- `ip`: IP address of the request origin
-- `service`: Name of the service performing the action
-- `tenantId`: Name of the tenant performing the action
-- `updatedData`: Flexible object containing the changed data
-- `type`: Type of log (default: "audit_logging")
-- `level`: Log level (default: "info")
-
-## Dependencies
-
-This library includes:
-
-- **SLF4J API**: For logging abstraction (version 2.0.9)
-- **Jackson Databind**: For JSON serialization (version 2.15.3)
-- **Jackson Annotations**: For JSON annotations (version 2.15.3)
-- **Lombok**: For code generation (version 1.18.30)
-- **Logback Classic**: For default logging implementation (version 1.5.13)
-
-## Testing
-
-The library includes comprehensive unit tests using:
-
-- JUnit 5 for test framework
-- Mockito for mocking dependencies
-- Real ObjectMapper instances for serialization testing
-
-To run tests:
-```bash
-mvn test
-```
-
-## Configuration
-
-The logger uses any SLF4J-compatible logging framework. Configure your chosen logging framework as needed. The library itself requires no additional configuration.
+*   **Java**: 17 or higher.
+*   **Logging Framework**: SLF4J 2.0+.
+    *   *Note:* The "Async Caller Injection" feature works best with **Logback Classic**. If using Log4j2 or others, the library falls back to standard logging (JSON is preserved, but line numbers in async threads may point to the proxy).
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License, Version 2.0.
 
 ## Author
 
 - **Azan Rashid** - [ExpertFlow](https://www.expertflow.com/)
-
-## Development
-
-### Prerequisites
-
-- Java 17 or higher
-- Maven 3.6.0 or higher
-
-### Building
-
-To build the project:
-```bash
-mvn clean install
-```
-
-### Publishing
-
-This library is published to Maven Central. The publishing process is automated through the Sonatype Central Publishing Plugin.

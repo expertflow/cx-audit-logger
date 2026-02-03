@@ -4,117 +4,119 @@ import com.ef.auditlogger.dtos.AuditInput;
 import com.ef.auditlogger.models.AuditLogPayload;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.spi.LocationAwareLogger;
 
-/**
- * An ultra-minimal audit logger with a single, convenient method.
- * This class is framework-agnostic and must be instantiated by the user.
- */
 public class AuditLogger {
     public static final String AUDIT_LOGGING = "audit_logging";
     private final ObjectMapper objectMapper;
+
+    private static final LogbackReflector REFLECTOR = new LogbackReflector();
 
     public AuditLogger(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
     /**
-     * The single, convenient method to create and write an audit log entry.
-     * It takes a simple input object, transforms it into the full log payload,
-     * and writes it to the log.
-     *
-     * @param logger The SLF4J logger instance from the calling class.
-     * @param input  The simple object containing the necessary audit data.
+     * Legacy support
      */
     public void log(Logger logger, AuditInput input, String fqcn) {
-        try {
-            Map<String, Object> attributes = new HashMap<>();
-            if (input.getService() != null) {
-                attributes.put("service", input.getService());
-            }
-
-            if (input.getTenantId() != null) {
-                attributes.put("tenantId", input.getTenantId());
-            }
-
-            attributes.put("updated_data",
-                    input.getUpdatedData() != null ? input.getUpdatedData() : Map.of()
-            );
-
-            int level;
-
-            if (input.getLevel() == null) {
-                input.setLevel("INFO");
-            }
-
-            switch (input.getLevel().toUpperCase()) {
-                case "TRACE" -> level = LocationAwareLogger.TRACE_INT;
-                case "DEBUG" -> level = LocationAwareLogger.DEBUG_INT;
-                case "WARN" -> level = LocationAwareLogger.WARN_INT;
-                case "ERROR" -> level = LocationAwareLogger.ERROR_INT;
-                default -> level = LocationAwareLogger.INFO_INT;
-            }
-
-            AuditLogPayload payload = AuditLogPayload.builder()
-                    .timestamp(Instant.now().toString())
-                    .type(sanitizeType(input.getType()))
-                    .level(input.getLevel().toLowerCase())
-                    .userId(input.getUserId())
-                    .userName(input.getUserName())
-                    .action(input.getAction())
-                    .resource(input.getResource())
-                    .resourceId(input.getResourceId())
-                    .sourceIpAddress(input.getIp())
-                    .attributes(attributes)
-                    .build();
-
-            String jsonMessage = objectMapper.writeValueAsString(payload);
-
-            if (logger instanceof LocationAwareLogger locationAwareLogger) {
-                locationAwareLogger.log(
-                        null,
-                        fqcn,
-                        level,
-                        jsonMessage,
-                        null,
-                        null
-                );
-            } else {
-                if (level == LocationAwareLogger.ERROR_INT) {
-                    logger.error(jsonMessage);
-                } else if (level == LocationAwareLogger.WARN_INT) {
-                    logger.warn(jsonMessage);
-                } else if (level == LocationAwareLogger.DEBUG_INT) {
-                    logger.debug(jsonMessage);
-                } else if (level == LocationAwareLogger.TRACE_INT) {
-                    logger.trace(jsonMessage);
-                } else {
-                    logger.info(jsonMessage);
-                }
-            }
-        } catch (JsonProcessingException e) {
-            logger.error("Failed to serialize audit log: {}, Error: {}", input, e.getMessage());
-        } catch (RuntimeException e) {
-            logger.error("Unexpected error during audit logging: {}", e.getMessage());
-        }
+        log(logger, input, fqcn, null);
     }
 
     /**
-     * Enforces naming convention: audit_logging, metrics, or tracing
+     * Enhanced log method supporting manual StackTraceElement injection
      */
+    public void log(Logger logger, AuditInput input, String fqcn, StackTraceElement caller) {
+        try {
+            String jsonMessage = buildJsonMessage(input);
+
+            Logger actualLogger = unwrap(logger);
+
+            if (caller != null && REFLECTOR.isAvailable() && isLogback(actualLogger)) {
+                REFLECTOR.log(actualLogger, input.getLevel(), jsonMessage, caller);
+                return;
+            }
+
+            int levelInt = getSlf4jLevel(input.getLevel());
+            if (logger instanceof LocationAwareLogger lAL) {
+                lAL.log(null, fqcn, levelInt, jsonMessage, null, null);
+            } else {
+                logStandard(logger, levelInt, jsonMessage);
+            }
+        } catch (Exception e) {
+            logger.error("Audit logging failed", e);
+        }
+    }
+
+    private Logger unwrap(Logger logger) {
+        try {
+            if (logger.getClass().getName().contains("Slf4jLogger")) {
+                Field field = logger.getClass().getDeclaredField("logger");
+                field.setAccessible(true);
+                Object internal = field.get(logger);
+                if (internal instanceof Logger l) return l;
+            }
+        } catch (Exception ignored) {}
+        return logger;
+    }
+
+    private String buildJsonMessage(AuditInput input) throws JsonProcessingException {
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put("service", input.getService());
+        attributes.put("tenantId", input.getTenantId());
+        attributes.put("updated_data", input.getUpdatedData() != null ? input.getUpdatedData() : Map.of());
+
+        AuditLogPayload payload = AuditLogPayload.builder()
+                .timestamp(Instant.now().toString())
+                .type(sanitizeType(input.getType()))
+                .level(input.getLevel() != null ? input.getLevel().toLowerCase() : "info")
+                .userId(input.getUserId())
+                .userName(input.getUserName())
+                .action(input.getAction())
+                .resource(input.getResource())
+                .resourceId(input.getResourceId())
+                .sourceIpAddress(input.getIp())
+                .attributes(attributes)
+                .build();
+
+        return objectMapper.writeValueAsString(payload);
+    }
+
+    private boolean isLogback(Logger logger) {
+        return logger.getClass().getName().startsWith("ch.qos.logback.classic.Logger");
+    }
+
+    private int getSlf4jLevel(String levelStr) {
+        if (levelStr == null) return LocationAwareLogger.INFO_INT;
+        return switch (levelStr.toUpperCase()) {
+            case "TRACE" -> LocationAwareLogger.TRACE_INT;
+            case "DEBUG" -> LocationAwareLogger.DEBUG_INT;
+            case "WARN" -> LocationAwareLogger.WARN_INT;
+            case "ERROR" -> LocationAwareLogger.ERROR_INT;
+            default -> LocationAwareLogger.INFO_INT;
+        };
+    }
+
+    private void logStandard(Logger logger, int level, String msg) {
+        switch (level) {
+            case LocationAwareLogger.ERROR_INT -> logger.error(msg);
+            case LocationAwareLogger.WARN_INT -> logger.warn(msg);
+            case LocationAwareLogger.DEBUG_INT -> logger.debug(msg);
+            default -> logger.info(msg);
+        }
+    }
+
     private String sanitizeType(String inputType) {
         if (inputType == null) return AUDIT_LOGGING;
-
         String normalized = inputType.toLowerCase().trim();
-
         if (normalized.contains("audit")) return AUDIT_LOGGING;
         if (normalized.contains("metric")) return "metrics";
-        if (normalized.contains("trace") || normalized.contains("tracing")) return "tracing";
-
+        if (normalized.contains("trace")) return "tracing";
         return AUDIT_LOGGING;
     }
 }

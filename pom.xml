@@ -6,7 +6,7 @@
     <groupId>io.github.expertflow</groupId>
     <artifactId>cx-audit-logger</artifactId>
     <packaging>jar</packaging>
-    <version>1.1</version>
+    <version>1.2.0</version>
     <name>cx-audit-logger</name>
     <url>https://github.com/expertflow/cx-audit-logger</url>
     <description>This dependency contains json logger for audit logging in expert flow's CIM project</description>
