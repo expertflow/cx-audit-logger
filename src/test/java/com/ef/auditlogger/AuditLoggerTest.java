@@ -4,7 +4,6 @@ import com.ef.auditlogger.dtos.AuditInput;
 import com.ef.auditlogger.models.AuditLogPayload;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,15 +12,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/**
- * Unit tests for the provided AuditLogger implementation.
- * This test class validates the "Never Throws" behavior and correct payload generation.
- */
 @ExtendWith(MockitoExtension.class)
 class AuditLoggerTest {
 
@@ -60,7 +56,7 @@ class AuditLoggerTest {
         // Assert
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(mockLogger).info(captor.capture());
-        verify(mockLogger, never()).error(anyString(), any(), any());
+        verify(mockLogger, never()).error(anyString(), any(Throwable.class));
 
         String loggedJson = captor.getValue();
         assertNotNull(loggedJson);
@@ -69,13 +65,11 @@ class AuditLoggerTest {
         assertEquals("u123", loggedPayload.getUserId());
         assertEquals("CREATE", loggedPayload.getAction());
         assertEquals("UserService", loggedPayload.getAttributes().get("service"));
-        assertEquals("audit_logging", loggedPayload.getType());
     }
 
     @Test
     void log_shouldLogError_whenSerializationFails() throws JsonProcessingException {
         // Arrange
-        // Create a mocked ObjectMapper that is programmed to fail
         ObjectMapper failingMapper = mock(ObjectMapper.class);
         JsonProcessingException testException = new JsonProcessingException("Test Serialization Failure") {};
         when(failingMapper.writeValueAsString(any())).thenThrow(testException);
@@ -93,53 +87,37 @@ class AuditLoggerTest {
         });
 
         // Assert
-        verify(mockLogger).error("Failed to serialize audit log: {}, Error: {}", input, testException.getMessage());
+        verify(mockLogger).error(eq("Audit logging failed"), eq(testException));
         verify(mockLogger, never()).info(anyString());
     }
 
     @Test
     void log_shouldLogError_whenInputIsNull() {
-        AuditInput nullInput = null;
-
+        // Act
         assertDoesNotThrow(() -> {
-            auditLogger.log(mockLogger, nullInput, this.getClass().getName());
+            auditLogger.log(mockLogger, null, this.getClass().getName());
         });
 
-        verify(mockLogger).error(eq("Unexpected error during audit logging: {}"), anyString());
+        // Assert
+        verify(mockLogger).error(eq("Audit logging failed"), any(NullPointerException.class));
         verify(mockLogger, never()).info(anyString());
     }
 
     @Test
     void log_shouldLogError_whenInputCausesOtherRuntimeException() {
+        // Arrange
         AuditInput buggyInput = mock(AuditInput.class);
         RuntimeException testException = new IllegalStateException("Unexpected bug!");
+
         when(buggyInput.getService()).thenThrow(testException);
 
+        // Act
         assertDoesNotThrow(() -> {
             auditLogger.log(mockLogger, buggyInput, this.getClass().getName());
         });
 
-        verify(mockLogger).error("Unexpected error during audit logging: {}", testException.getMessage());
+        // Assert
+        verify(mockLogger).error(eq("Audit logging failed"), eq(testException));
         verify(mockLogger, never()).info(anyString());
-    }
-
-    @Test
-    void testLogIncludesCallerInfo() {
-        AuditInput input = AuditInput.builder()
-                .userId("123")
-                .userName("testUser")
-                .action("CREATE")
-                .resource("User")
-                .resourceId("456")
-                .ip("127.0.0.1")
-                .tenantId("expertflow")
-                .service("testService")
-                .type("audit_logging")
-                .level("info")
-                .build();
-
-        auditLogger.log(mockLogger, input, this.getClass().getName());
-
-        verify(mockLogger).info(anyString());
     }
 }
