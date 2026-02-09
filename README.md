@@ -1,10 +1,10 @@
 # CX Audit Logger
 
-CX Audit Logger is a high-performance, framework-agnostic audit logging library designed for modern Java applications. It produces structured JSON-formatted logs and includes advanced features for deep recursive diffing and support for asynchronous or virtual thread environments.
+CX Audit Logger is a high-performance, framework-agnostic audit logging library designed for modern Java applications. It produces structured JSON-formatted logs and includes advanced features for deep recursive diffing and support for asynchronous or multithreaded environments.
 
 ## Features
 
-- **Zero-Config Async Support**: Preserves correct Class, Method, and Line numbers even when logging from `@Async` or Virtual Threads (requires Logback).
+- **Zero-Config Async Support**: Preserves correct Class, Method, and Line numbers even when logging from `@Async` or Separate Threads (requires Logback).
 - **Deep Recursive Diffing**: Built-in utility to calculate the difference between "Old" and "New" objects. It minimizes log volume by only recording what actually changed.
 - **High Performance**: Uses cached reflection handles to inject caller data with near-zero overhead.
 - **JSON-formatted output**: Structured logging for better analysis (ELK/OpenSearch compatible).
@@ -37,7 +37,6 @@ import com.ef.auditlogger.dtos.AuditInput;
 public class UserService {
     private final Logger logger = LoggerFactory.getLogger(UserService.class);
     private final String FQCN = UserService.class.getName();
-    // Inject or instantiate
     private final AuditLogger auditLogger = new AuditLogger(new ObjectMapper());
 
     public void createUser() {
@@ -48,14 +47,13 @@ public class UserService {
                 .updatedData(Map.of("role", "admin"))
                 .build();
 
-        // Standard call - Auto-detects stack trace
         auditLogger.log(logger, input, FQCN);
     }
 }
 ```
 
-### 2. Asynchronous / Virtual Thread Usage
-In `@Async` methods or Virtual Threads, the standard stack trace is lost (pointing to internal JVM proxy classes). To fix this, capture the stack frame in the main thread and pass it to the logger.
+### 2. Asynchronous / Separate Thread Usage
+In `@Async` methods or Separate Threads, the standard stack trace is lost (pointing to internal JVM proxy classes). To fix this, capture the stack frame in the main thread and pass it to the logger.
 
 The library uses optimized reflection to inject this data into Logback, ensuring your logs show the original service location instead of `CompletableFuture` or `DirectMethodHandleAccessor`.
 
@@ -63,14 +61,11 @@ The library uses optimized reflection to inject this data into Logback, ensuring
 public class AsyncWorker {
     
     public void processAsync() {
-        // 1. Capture the caller frame in the MAIN thread
         StackTraceElement caller = Thread.currentThread().getStackTrace()[1];
         
-        // 2. Pass it to your async method/thread
         CompletableFuture.runAsync(() -> {
              AuditInput input = AuditInput.builder().action("UPDATE").build();
              
-             // 3. Call the overloaded log method
              auditLogger.log(logger, input, FQCN, caller); 
         });
     }
@@ -88,7 +83,6 @@ AuditDiffCalculator calculator = new AuditDiffCalculator(new ObjectMapper());
 Map<String, Object> oldData = Map.of("status", "ACTIVE", "retries", 0);
 Map<String, Object> newData = Map.of("status", "INACTIVE", "retries", 0);
 
-// Returns only: {"status": "INACTIVE"}
 Object diff = calculator.calculateDiff(oldData, newData); 
 
 AuditInput input = AuditInput.builder()
@@ -152,7 +146,7 @@ The logger generates structured JSON. When using the Diff Calculator, the `updat
     *   Standard method. Uses SLF4J `LocationAwareLogger` to auto-detect caller info.
 *   **`log(Logger logger, AuditInput input, String fqcn, StackTraceElement caller)`**
     *   Manually injects the provided `StackTraceElement` into the logging event.
-    *   Supports standard Logback features (`%class`, `%method`, `%line`) even when running on Virtual Threads.
+    *   Supports standard Logback features (`%class`, `%method`, `%line`) even when running on Separate Threads.
     *   Falls back gracefully to standard logging if Reflection fails or if not using Logback.
 
 ### `AuditDiffCalculator` Class
